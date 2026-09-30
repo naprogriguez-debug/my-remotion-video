@@ -1,0 +1,61 @@
+[Uploading render.yml…]()
+name: Render video
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "my-remotion-video/my-remotion-video/**"
+      - ".github/workflows/render.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: render
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: my-remotion-video/my-remotion-video
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install system libraries for headless Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev \
+            libasound2t64 libxrandr2 libxkbcommon-dev libxfixes3 libxcomposite1 \
+            libxdamage1 libatk-bridge2.0-0 libpango-1.0-0 libcairo2 libcups2
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Render
+        run: npx remotion render MyComp out/video.mp4
+
+      - name: Upload video as run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: video
+          path: my-remotion-video/my-remotion-video/out/video.mp4
+
+      - name: Commit rendered video to renders/
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p renders
+          cp my-remotion-video/my-remotion-video/out/video.mp4 renders/video.mp4
+          git config user.name "github-actions[bot]"
+          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          git add -f renders/video.mp4
+          git commit -m "Render video [skip ci]" || echo "No changes"
+          git push
